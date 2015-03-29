@@ -32,13 +32,13 @@ public final class Constants {
     private Constants() {
     }
 
-    public static final byte[] FROSTWIRE_VERSION = { (byte) 1, (byte) 4, (byte) 9 };
+    public static final byte[] FROSTWIRE_VERSION = { (byte) 1, (byte) 5, (byte) 0 };
 
     public static final String FROSTWIRE_VERSION_STRING = FROSTWIRE_VERSION[0] + "." + FROSTWIRE_VERSION[1] + "." + FROSTWIRE_VERSION[2];
 
     /** should manually match the manifest, here for convenience so we can ask for it from static contexts without
      * needing to pass the Android app context to obtain the PackageManager instance.  */
-    public static final String FROSTWIRE_BUILD = "176";
+    public static final String FROSTWIRE_BUILD = "177";
 
     public static final boolean IS_AMAZON_DISTRIBUTION = false;
     
@@ -53,7 +53,8 @@ public final class Constants {
     public static final String PREF_KEY_CORE_UUID = "frostwire.prefs.core.uuid";
     public static final String PREF_KEY_CORE_LAST_SEEN_VERSION = "frostwire.prefs.core.last_seen_version";
 
-    public static final String PREF_KEY_NETWORK_USE_UPNP = "froswire.prefs.network.use_upnp";
+    public static final String PREF_KEY_NETWORK_ENABLE_DHT = "froswire.prefs.network.enable_dht";
+    public static final String PREF_KEY_NETWORK_ENABLE_WIFI_SHARING = "froswire.prefs.network.enable_wifi_sharing";
     public static final String PREF_KEY_NETWORK_USE_MOBILE_DATA = "frostwire.prefs.network.use_mobile_data";
     public static final String PREF_KEY_NETWORK_USE_RANDOM_LISTENING_PORT = "frostwire.prefs.network.use_random_listening_port";
     public static final String PREF_KEY_NETWORK_MAX_CONCURRENT_UPLOADS = "frostwire.prefs.network.max_concurrent_uploads";
@@ -161,8 +162,6 @@ public final class Constants {
 
     public static final int MAX_NUM_DOWNLOAD_CHECKED = 5;
 
-    public static final int MAX_INDEXED_TORRENT_SUB_FILES = 4000;
-
     public static final int MAX_PEER_HTTP_DOWNLOAD_RETRIES = 3;
 
     public static final int DEVICE_MAJOR_TYPE_DESKTOP = CommonConstants.DEVICE_MAJOR_TYPE_DESKTOP;
@@ -171,4 +170,7 @@ public final class Constants {
 
     public static final String BITCOIN_DONATION_URI = "bitcoin:19NzEEocAWydbkm3xEEVu43Ho2JFEYf5Vr?amount=0.0104";
     public static final String MOBILE_CORE_DEVHASH = "6OJUVFECLGYH3JKYZB41VLQA4JXW5";
+
+    public static final int NOTIFIED_BLOOM_FILTER_BITSET_SIZE = 320000; //40 kilobytes
+    public static final int NOTIFIED_BLOOM_FILTER_EXPECTED_ELEMENTS = 10000;
 }

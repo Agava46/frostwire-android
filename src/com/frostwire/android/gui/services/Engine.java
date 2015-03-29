@@ -25,11 +25,15 @@ import android.net.ConnectivityManager;
 import android.net.wifi.WifiManager;
 import android.os.IBinder;
 import android.telephony.TelephonyManager;
+import com.frostwire.android.core.Constants;
 import com.frostwire.android.core.CoreRuntimeException;
 import com.frostwire.android.core.player.CoreMediaPlayer;
 import com.frostwire.android.gui.services.EngineService.EngineServiceBinder;
+import com.frostwire.logging.Logger;
+import com.frostwire.util.BloomFilter;
 
-import java.io.File;
+import java.io.*;
+import java.util.BitSet;
 import java.util.concurrent.ExecutorService;
 
 /**
@@ -38,10 +42,12 @@ import java.util.concurrent.ExecutorService;
  *
  */
 public final class Engine implements IEngineService {
-
+    private static final Logger LOG = Logger.getLogger(Engine.class);
     private EngineService service;
     private ServiceConnection connection;
     private EngineBroadcastReceiver receiver;
+    private BloomFilter<String> notifiedDownloads;
+    private final File notifiedDat;
 
     private static Engine instance;
 
@@ -60,7 +66,59 @@ public final class Engine implements IEngineService {
     }
 
     private Engine(Application context) {
+        notifiedDat = new File(context.getExternalFilesDir(null),"notified.dat");
+        loadNotifiedDownloads();
         startEngineService(context);
+    }
+
+    /**
+     * loads a dictionary of infohashes that have been already
+     * notified from notified.dat. This binary file packs together
+     * infohashes 20 bytes at the time.
+     *
+     * this method goes through the file, 20 bytes at the time and populates
+     * a HashMap we can use to query wether or not we should notify the user
+     * in constant time.
+     *
+     * When we have a new infohash, the file conveniently grows by appending the
+     * new 20 bytes of the new hash.
+     */
+    private void loadNotifiedDownloads() {
+        notifiedDownloads = new BloomFilter<String>(Constants.NOTIFIED_BLOOM_FILTER_BITSET_SIZE,
+                                                    Constants.NOTIFIED_BLOOM_FILTER_EXPECTED_ELEMENTS);
+
+        if (!notifiedDat.exists()) {
+            try {
+                notifiedDat.createNewFile();
+            } catch (Throwable e) {
+                e.printStackTrace();
+                LOG.error("Could not create notified.dat",e);
+            }
+        } else {
+            try {
+                ObjectInputStream ois = new ObjectInputStream(new FileInputStream(notifiedDat));
+                int numberOfElements = ois.readInt();
+                BitSet bs = (BitSet) ois.readObject();
+                ois.close();
+                notifiedDownloads = new BloomFilter<String>(
+                        Constants.NOTIFIED_BLOOM_FILTER_BITSET_SIZE,
+                        Constants.NOTIFIED_BLOOM_FILTER_EXPECTED_ELEMENTS,
+                        numberOfElements,
+                        bs);
+                LOG.info("Loaded bloom filter from notified.dat sucessfully ("+numberOfElements+" elements)");
+            } catch (Throwable e) {
+                LOG.error("Error reading notified.dat", e);
+
+                // reset the file in case we changed the format or something was borked.
+                // worst case we'll have a new bloom filter.
+                notifiedDat.delete();
+                try {
+                    notifiedDat.createNewFile();
+                } catch (IOException e1) {
+                    LOG.error(e1.getMessage(), e1);
+                }
+            }
+        }
     }
 
     @Override
@@ -108,10 +166,57 @@ public final class Engine implements IEngineService {
         return EngineService.threadPool;
     }
 
-    public void notifyDownloadFinished(String displayName, File file) {
+    public void notifyDownloadFinished(String displayName, File file, String optionalInfoHash) {
         if (service != null) {
+            if (optionalInfoHash != null && !optionalInfoHash.equals("0000000000000000000000000000000000000000")) {
+                if (!updateNotifiedTorrentDownloads(optionalInfoHash)) {
+                    // did not update, we already knew about it. skip notification.
+                    return;
+                }
+            }
             service.notifyDownloadFinished(displayName, file);
         }
+    }
+
+    private boolean updateNotifiedTorrentDownloads(String optionalInfoHash) {
+        boolean result = false;
+        optionalInfoHash = optionalInfoHash.toLowerCase().trim();
+        if (notifiedDownloads.contains(optionalInfoHash)) {
+            LOG.info("Skipping notification on " + optionalInfoHash);
+        } else {
+            result = addNewNotifiedInfoHash(optionalInfoHash);
+        }
+        return result;
+    }
+
+    private boolean addNewNotifiedInfoHash(String infoHash) {
+        boolean result = false;
+        if (notifiedDownloads != null && infoHash != null && infoHash.length() == 40) {
+            infoHash = infoHash.toLowerCase().trim();
+            try {
+                // Another partial download might have just finished writing
+                // this info hash while I was waiting for the file lock.
+                if (!notifiedDownloads.contains(infoHash)) {
+                    notifiedDownloads.add(infoHash);
+                    synchronized (notifiedDat) {
+                        ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(notifiedDat));
+                        oos.writeInt(notifiedDownloads.count());
+                        oos.writeObject(notifiedDownloads.getBitSet());
+                        oos.flush();
+                        oos.close();
+                    }
+                    result = true;
+                }
+            } catch (Throwable e) {
+                LOG.error("Could not update infohash on notified.dat", e);
+                result = false;
+            }
+        }
+        return result;
+    }
+
+    public void notifyDownloadFinished(String displayName, File file) {
+        notifyDownloadFinished(displayName, file, null);
     }
 
     @Override
